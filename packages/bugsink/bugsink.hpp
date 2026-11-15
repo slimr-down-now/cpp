@@ -52,7 +52,7 @@ inline std::string get_hostname() {
 } // namespace detail
 
 class BugsinkReporter {
-public:
+  public:
     struct ParsedDsn {
         std::string protocol;
         std::string publicKey;
@@ -66,21 +66,25 @@ public:
 
     static ParsedDsn parseDsn(std::string_view dsn) {
         ParsedDsn res;
-        if (dsn.empty()) return res;
+        if (dsn.empty())
+            return res;
 
         // Pattern: https://<publicKey>@<host>/<projectId>
         auto proto_end = dsn.find("://");
-        if (proto_end == std::string_view::npos) return res;
+        if (proto_end == std::string_view::npos)
+            return res;
         res.protocol = std::string(dsn.substr(0, proto_end));
 
         std::string_view rest = dsn.substr(proto_end + 3);
         auto at_pos = rest.find('@');
-        if (at_pos == std::string_view::npos) return res;
+        if (at_pos == std::string_view::npos)
+            return res;
         res.publicKey = std::string(rest.substr(0, at_pos));
 
         rest = rest.substr(at_pos + 1);
         auto slash_pos = rest.find('/');
-        if (slash_pos == std::string_view::npos) return res;
+        if (slash_pos == std::string_view::npos)
+            return res;
         res.host = std::string(rest.substr(0, slash_pos));
 
         res.projectId = std::string(rest.substr(slash_pos + 1));
@@ -92,7 +96,7 @@ public:
 
     std::string effectiveDsn() const {
         if (!env_var_.empty()) {
-            const char* val = std::getenv(env_var_.c_str());
+            const char *val = std::getenv(env_var_.c_str());
             if (val != nullptr) {
                 return std::string(val);
             }
@@ -103,21 +107,23 @@ public:
     std::string envelopeUrl() const {
         std::string dsn = effectiveDsn();
         auto parsed = parseDsn(dsn);
-        if (!parsed.valid) return "";
+        if (!parsed.valid)
+            return "";
         return parsed.protocol + "://" + parsed.host + "/api/" + parsed.projectId +
                "/envelope/?sentry_key=" + parsed.publicKey + "&sentry_version=7";
     }
 
-    std::string formatEnvelope(const Json& payload, const std::string& eventId, const std::string& timestamp) const {
+    std::string formatEnvelope(const Json &payload, const std::string &eventId, const std::string &timestamp) const {
         std::string line1 = "{\"event_id\":\"" + eventId + "\",\"sent_at\":\"" + timestamp + "\"}";
         std::string line2 = "{\"type\":\"event\",\"content_type\":\"application/json\"}";
         std::string line3 = slimr::write_json(payload);
         return line1 + "\n" + line2 + "\n" + line3 + "\n";
     }
 
-    bool reportError(const std::exception& err, const Json& extra = Json::object_t{}) {
+    bool reportError(const std::exception &err, const Json &extra = Json::object_t{}) {
         std::string url = envelopeUrl();
-        if (url.empty()) return false;
+        if (url.empty())
+            return false;
 
         std::string eventId = detail::generate_uuid_hex();
         std::string ts = detail::iso_timestamp();
@@ -161,9 +167,10 @@ public:
         }
     }
 
-    bool reportMessage(std::string_view message, std::string_view level = "warning", const Json& extra = Json::object_t{}) {
+    bool reportMessage(std::string_view message, std::string_view level = "warning", const Json &extra = Json::object_t{}) {
         std::string url = envelopeUrl();
-        if (url.empty()) return false;
+        if (url.empty())
+            return false;
 
         std::string eventId = detail::generate_uuid_hex();
         std::string ts = detail::iso_timestamp();
@@ -196,7 +203,7 @@ public:
         }
     }
 
-private:
+  private:
     std::string default_dsn_;
     std::string env_var_;
 };

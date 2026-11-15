@@ -59,14 +59,12 @@ TEST_SUITE("SQLite Database") {
         // Bare name, colon, dollar, at prefix
         std::map<std::string, SqlValue> params1{
             {"name", std::string("Alice")},
-            {"email", std::string("alice@example.com")}
-        };
+            {"email", std::string("alice@example.com")}};
         db.run("INSERT INTO users (name, email) VALUES (:name, :email);", params1);
 
         std::map<std::string, SqlValue> params2{
             {":name", std::string("Bob")},
-            {"email", std::string("bob@example.com")}
-        };
+            {"email", std::string("bob@example.com")}};
         db.run("INSERT INTO users (name, email) VALUES ($name, @email);", params2);
 
         auto count = db.pluck<int64_t>("SELECT count(*) FROM users;");
@@ -79,11 +77,9 @@ TEST_SUITE("SQLite Database") {
 
     TEST_CASE("Migrations: vector (1..N)") {
         Database db(":memory:", SqliteOptions{
-            .migrations = std::vector<std::string>{
-                "CREATE TABLE v1 (x INT);",
-                "CREATE TABLE v2 (y TEXT);"
-            }
-        });
+                                    .migrations = std::vector<std::string>{
+                                        "CREATE TABLE v1 (x INT);",
+                                        "CREATE TABLE v2 (y TEXT);"}});
 
         int64_t ver = db.pluck<int64_t>("PRAGMA user_version;").value_or(0);
         CHECK(ver == 2);
@@ -97,10 +93,8 @@ TEST_SUITE("SQLite Database") {
     TEST_CASE("Migrations: squashed map and stale version check") {
         // Squashed migration starting at version 10
         Database db(":memory:", SqliteOptions{
-            .migrations = std::map<int, std::string>{
-                {10, "CREATE TABLE baseline (id INT);"}
-            }
-        });
+                                    .migrations = std::map<int, std::string>{
+                                        {10, "CREATE TABLE baseline (id INT);"}}});
         CHECK(db.pluck<int64_t>("PRAGMA user_version;").value_or(0) == 10);
 
         // Stale database test: user_version is 5, but min migration is 10 -> throws!
@@ -111,10 +105,9 @@ TEST_SUITE("SQLite Database") {
             staleDb.exec("PRAGMA user_version = 5;");
         }
         CHECK_THROWS_AS((Database(stalePath, SqliteOptions{
-            .migrations = std::map<int, std::string>{
-                {10, "CREATE TABLE baseline (id INT);"}
-            }
-        })), std::runtime_error);
+                                                 .migrations = std::map<int, std::string>{
+                                                     {10, "CREATE TABLE baseline (id INT);"}}})),
+                        std::runtime_error);
     }
 
     TEST_CASE("Transactions and nested Savepoints") {
@@ -122,36 +115,38 @@ TEST_SUITE("SQLite Database") {
         db.exec("CREATE TABLE logs (msg TEXT);");
 
         // Successful transaction
-        db.transaction([&](Tx& tx) {
+        db.transaction([&](Tx &tx) {
             tx.run("INSERT INTO logs VALUES ('tx1');");
         });
         CHECK(db.pluck<int64_t>("SELECT count(*) FROM logs;").value_or(0) == 1);
 
         // Rollback transaction on throw
         try {
-            db.transaction([&](Tx& tx) {
+            db.transaction([&](Tx &tx) {
                 tx.run("INSERT INTO logs VALUES ('tx2');");
                 throw std::runtime_error("abort");
             });
-        } catch (...) {}
+        } catch (...) {
+        }
         CHECK(db.pluck<int64_t>("SELECT count(*) FROM logs;").value_or(0) == 1);
 
         // Nested savepoint commit and partial rollback
-        db.transaction([&](Tx& outer) {
+        db.transaction([&](Tx &outer) {
             outer.run("INSERT INTO logs VALUES ('outer');");
 
             // Successful inner savepoint
-            outer.transaction([&](Tx& inner) {
+            outer.transaction([&](Tx &inner) {
                 inner.run("INSERT INTO logs VALUES ('inner1');");
             });
 
             // Failed inner savepoint
             try {
-                outer.transaction([&](Tx& inner2) {
+                outer.transaction([&](Tx &inner2) {
                     inner2.run("INSERT INTO logs VALUES ('inner2');");
                     throw std::runtime_error("inner abort");
                 });
-            } catch (...) {}
+            } catch (...) {
+            }
         });
 
         auto msgs = db.pluckAll<std::string>("SELECT msg FROM logs ORDER BY rowid;");
@@ -163,8 +158,9 @@ TEST_SUITE("SQLite Database") {
 
     TEST_CASE("Custom scalar function") {
         Database db(":memory:");
-        db.registerFunction("add_ten", [](const std::vector<SqlValue>& args) -> SqlValue {
-            if (args.empty()) return int64_t(0);
+        db.registerFunction("add_ten", [](const std::vector<SqlValue> &args) -> SqlValue {
+            if (args.empty())
+                return int64_t(0);
             int64_t val = std::get<int64_t>(args[0]);
             return val + 10;
         });
@@ -188,10 +184,9 @@ TEST_SUITE("SQLite Database") {
         Database db(dbPath);
         // Test limit and truncation
         auto iterRes = db.iterateLimited("SELECT * FROM records ORDER BY id;", IterateOptions{
-            .limit = 3,
-            .readOnlyConnection = true,
-            .setupSql = "PRAGMA query_only = ON;"
-        });
+                                                                                   .limit = 3,
+                                                                                   .readOnlyConnection = true,
+                                                                                   .setupSql = "PRAGMA query_only = ON;"});
 
         CHECK(iterRes.columns.size() == 2);
         CHECK(iterRes.columns[0] == "id");
@@ -244,17 +239,16 @@ TEST_SUITE("SQLite Database") {
     TEST_CASE("get() and pluck() step only the first row and reuse cached statements") {
         Database db(":memory:");
         db.exec("CREATE TABLE items (id INTEGER PRIMARY KEY);");
-        db.transaction([&](Tx& tx) {
+        db.transaction([&](Tx &tx) {
             for (int64_t i = 1; i <= 100; ++i) {
                 tx.run("INSERT INTO items (id) VALUES (?);", {i});
             }
         });
 
         int64_t calls = 0;
-        db.registerFunction("count_step", [&](const std::vector<SqlValue>& args) -> SqlValue {
+        db.registerFunction("count_step", [&](const std::vector<SqlValue> &args) -> SqlValue {
             ++calls;
-            return args[0];
-        }, /*deterministic=*/false);
+            return args[0]; }, /*deterministic=*/false);
 
         auto row = db.get("SELECT count_step(id) AS val FROM items ORDER BY id;");
         CHECK(row.has_value());
@@ -304,7 +298,7 @@ TEST_SUITE("SQLite Database") {
         REQUIRE(std::holds_alternative<std::string>(*sv));
         CHECK(std::get<std::string>(*sv) == embedded);
 
-        db.registerFunction("echo_txt", [](const std::vector<SqlValue>& args) -> SqlValue {
+        db.registerFunction("echo_txt", [](const std::vector<SqlValue> &args) -> SqlValue {
             return args.at(0);
         });
         auto fnOut = db.pluck<std::string>("SELECT echo_txt(?);", {embedded});
@@ -339,14 +333,13 @@ TEST_SUITE("SQLite Database") {
         db.exec("CREATE TABLE nums (v INTEGER);");
         db.run("INSERT INTO nums VALUES (7);");
 
-        db.registerFunction("nested_lookup", [&](const std::vector<SqlValue>& args) -> SqlValue {
+        db.registerFunction("nested_lookup", [&](const std::vector<SqlValue> &args) -> SqlValue {
             // Fill >256 distinct statements while the outer query holds an in-use cached statement
             for (int i = 0; i < 270; ++i) {
                 auto v = db.pluck<int64_t>("SELECT " + std::to_string(i) + ";");
                 (void)v;
             }
-            return args[0];
-        }, /*deterministic=*/false);
+            return args[0]; }, /*deterministic=*/false);
 
         auto res = db.pluck<int64_t>("SELECT nested_lookup(v) FROM nums;");
         CHECK(res.value_or(0) == 7);
@@ -373,7 +366,7 @@ TEST_SUITE("SQLite Database") {
             try {
                 Database wdb(dbPath);
                 for (int i = 1; i <= kTotalWrites; ++i) {
-                    wdb.transaction([&](Tx& tx) {
+                    wdb.transaction([&](Tx &tx) {
                         tx.run("INSERT INTO events (seq) VALUES (?);", {int64_t(i)});
                     });
                 }
@@ -392,9 +385,8 @@ TEST_SUITE("SQLite Database") {
                         maxObserved = *c;
                     }
                     auto iter = rdb.iterateLimited("SELECT seq FROM events ORDER BY id DESC;", IterateOptions{
-                        .limit = 5,
-                        .readOnlyConnection = true
-                    });
+                                                                                                   .limit = 5,
+                                                                                                   .readOnlyConnection = true});
                     (void)iter;
                 }
             } catch (...) {

@@ -1,17 +1,17 @@
 #define SLIMR_TEST_MAIN
-#include "test.hpp"
-#include "json.hpp"
-#include "reflect.hpp"
-#include "yaml.hpp"
-#include "sqlite.hpp"
-#include "curl.hpp"
-#include "ws.hpp"
 #include "bugsink.hpp"
-#include "mcp.hpp"
+#include "curl.hpp"
 #include "encoding.hpp"
+#include "json.hpp"
+#include "mcp.hpp"
 #include "proc.hpp"
-#include "time.hpp"
+#include "reflect.hpp"
+#include "sqlite.hpp"
+#include "test.hpp"
 #include "text.hpp"
+#include "time.hpp"
+#include "ws.hpp"
+#include "yaml.hpp"
 
 #include <iostream>
 
@@ -84,11 +84,14 @@ TEST_SUITE("JSON & Struct Reflection") {
         bool hasName = false;
         bool hasCount = false;
         bool hasActive = false;
-        for (const auto& r : reqArr) {
+        for (const auto &r : reqArr) {
             std::string fieldName = r.get<std::string>();
-            if (fieldName == "name") hasName = true;
-            if (fieldName == "count") hasCount = true;
-            if (fieldName == "active") hasActive = true;
+            if (fieldName == "name")
+                hasName = true;
+            if (fieldName == "count")
+                hasCount = true;
+            if (fieldName == "active")
+                hasActive = true;
         }
         CHECK(hasName == true);
         CHECK(hasCount == false);
@@ -159,14 +162,12 @@ TEST_SUITE("SQLite Database") {
         // Bare name, colon, dollar, at prefix
         std::map<std::string, SqlValue> params1{
             {"name", std::string("Alice")},
-            {"email", std::string("alice@example.com")}
-        };
+            {"email", std::string("alice@example.com")}};
         db.run("INSERT INTO users (name, email) VALUES (:name, :email);", params1);
 
         std::map<std::string, SqlValue> params2{
             {":name", std::string("Bob")},
-            {"email", std::string("bob@example.com")}
-        };
+            {"email", std::string("bob@example.com")}};
         db.run("INSERT INTO users (name, email) VALUES ($name, @email);", params2);
 
         auto count = db.pluck<int64_t>("SELECT count(*) FROM users;");
@@ -179,11 +180,9 @@ TEST_SUITE("SQLite Database") {
 
     TEST_CASE("Migrations: vector (1..N)") {
         Database db(":memory:", SqliteOptions{
-            .migrations = std::vector<std::string>{
-                "CREATE TABLE v1 (x INT);",
-                "CREATE TABLE v2 (y TEXT);"
-            }
-        });
+                                    .migrations = std::vector<std::string>{
+                                        "CREATE TABLE v1 (x INT);",
+                                        "CREATE TABLE v2 (y TEXT);"}});
 
         int64_t ver = db.pluck<int64_t>("PRAGMA user_version;").value_or(0);
         CHECK(ver == 2);
@@ -197,10 +196,8 @@ TEST_SUITE("SQLite Database") {
     TEST_CASE("Migrations: squashed map and stale version check") {
         // Squashed migration starting at version 10
         Database db(":memory:", SqliteOptions{
-            .migrations = std::map<int, std::string>{
-                {10, "CREATE TABLE baseline (id INT);"}
-            }
-        });
+                                    .migrations = std::map<int, std::string>{
+                                        {10, "CREATE TABLE baseline (id INT);"}}});
         CHECK(db.pluck<int64_t>("PRAGMA user_version;").value_or(0) == 10);
 
         // Stale database test: user_version is 5, but min migration is 10 -> throws!
@@ -211,10 +208,9 @@ TEST_SUITE("SQLite Database") {
             staleDb.exec("PRAGMA user_version = 5;");
         }
         CHECK_THROWS_AS((Database(stalePath, SqliteOptions{
-            .migrations = std::map<int, std::string>{
-                {10, "CREATE TABLE baseline (id INT);"}
-            }
-        })), std::runtime_error);
+                                                 .migrations = std::map<int, std::string>{
+                                                     {10, "CREATE TABLE baseline (id INT);"}}})),
+                        std::runtime_error);
     }
 
     TEST_CASE("Transactions and nested Savepoints") {
@@ -222,36 +218,38 @@ TEST_SUITE("SQLite Database") {
         db.exec("CREATE TABLE logs (msg TEXT);");
 
         // Successful transaction
-        db.transaction([&](Tx& tx) {
+        db.transaction([&](Tx &tx) {
             tx.run("INSERT INTO logs VALUES ('tx1');");
         });
         CHECK(db.pluck<int64_t>("SELECT count(*) FROM logs;").value_or(0) == 1);
 
         // Rollback transaction on throw
         try {
-            db.transaction([&](Tx& tx) {
+            db.transaction([&](Tx &tx) {
                 tx.run("INSERT INTO logs VALUES ('tx2');");
                 throw std::runtime_error("abort");
             });
-        } catch (...) {}
+        } catch (...) {
+        }
         CHECK(db.pluck<int64_t>("SELECT count(*) FROM logs;").value_or(0) == 1);
 
         // Nested savepoint commit and partial rollback
-        db.transaction([&](Tx& outer) {
+        db.transaction([&](Tx &outer) {
             outer.run("INSERT INTO logs VALUES ('outer');");
 
             // Successful inner savepoint
-            outer.transaction([&](Tx& inner) {
+            outer.transaction([&](Tx &inner) {
                 inner.run("INSERT INTO logs VALUES ('inner1');");
             });
 
             // Failed inner savepoint
             try {
-                outer.transaction([&](Tx& inner2) {
+                outer.transaction([&](Tx &inner2) {
                     inner2.run("INSERT INTO logs VALUES ('inner2');");
                     throw std::runtime_error("inner abort");
                 });
-            } catch (...) {}
+            } catch (...) {
+            }
         });
 
         auto msgs = db.pluckAll<std::string>("SELECT msg FROM logs ORDER BY rowid;");
@@ -263,8 +261,9 @@ TEST_SUITE("SQLite Database") {
 
     TEST_CASE("Custom scalar function") {
         Database db(":memory:");
-        db.registerFunction("add_ten", [](const std::vector<SqlValue>& args) -> SqlValue {
-            if (args.empty()) return int64_t(0);
+        db.registerFunction("add_ten", [](const std::vector<SqlValue> &args) -> SqlValue {
+            if (args.empty())
+                return int64_t(0);
             int64_t val = std::get<int64_t>(args[0]);
             return val + 10;
         });
@@ -288,10 +287,9 @@ TEST_SUITE("SQLite Database") {
         Database db(dbPath);
         // Test limit and truncation
         auto iterRes = db.iterateLimited("SELECT * FROM records ORDER BY id;", IterateOptions{
-            .limit = 3,
-            .readOnlyConnection = true,
-            .setupSql = "PRAGMA query_only = ON;"
-        });
+                                                                                   .limit = 3,
+                                                                                   .readOnlyConnection = true,
+                                                                                   .setupSql = "PRAGMA query_only = ON;"});
 
         CHECK(iterRes.columns.size() == 2);
         CHECK(iterRes.columns[0] == "id");
@@ -357,10 +355,9 @@ TEST_SUITE("MCP Protocol & CLI") {
             .name = "test_resource",
             .description = "Test resource text",
             .mimeType = "text/plain",
-            .load = []() { return "Hello from resource!"; }
-        });
+            .load = []() { return "Hello from resource!"; }});
 
-        app.tool<AddInput>("add", "Adds two numbers", [](const AddInput& in) {
+        app.tool<AddInput>("add", "Adds two numbers", [](const AddInput &in) {
             Json res = json_obj();
             res["sum"] = in.a.get() + in.b.get();
             return res;
@@ -391,10 +388,12 @@ TEST_SUITE("MCP Protocol & CLI") {
 
         bool foundAdd = false;
         bool foundResourceRead = false;
-        for (const auto& t : tools) {
+        for (const auto &t : tools) {
             std::string tName = t["name"].get<std::string>();
-            if (tName == "add") foundAdd = true;
-            if (tName == "mcp_resource_read") foundResourceRead = true;
+            if (tName == "add")
+                foundAdd = true;
+            if (tName == "mcp_resource_read")
+                foundResourceRead = true;
         }
         CHECK(foundAdd == true);
         CHECK(foundResourceRead == true);
@@ -403,13 +402,13 @@ TEST_SUITE("MCP Protocol & CLI") {
     TEST_CASE("tools/call: tool execution and media content blocks") {
         PluginApp app("media-app");
 
-        app.tool<AddInput>("add", "Adds two numbers", [](const AddInput& in) {
+        app.tool<AddInput>("add", "Adds two numbers", [](const AddInput &in) {
             Json res = json_obj();
             res["sum"] = in.a.get() + in.b.get();
             return res;
         });
 
-        app.tool<std::monostate>("get_image", "Returns a mock image block", [](const std::monostate&) {
+        app.tool<std::monostate>("get_image", "Returns a mock image block", [](const std::monostate &) {
             return McpResult::image("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "image/png");
         });
 
@@ -443,8 +442,7 @@ TEST_SUITE("MCP Protocol & CLI") {
             .name = "intro",
             .description = "Introduction doc",
             .mimeType = "text/markdown",
-            .load = []() { return "# Intro Header"; }
-        });
+            .load = []() { return "# Intro Header"; }});
 
         Json listResp = app.dispatchMcpJson(make_mcp_req(20, "resources/list"));
         auto resArr = listResp["result"]["resources"].get_array();
@@ -469,7 +467,7 @@ TEST_SUITE("MCP Protocol & CLI") {
 
     TEST_CASE("CLI direct invocation") {
         PluginApp app("cli-app");
-        app.tool<AddInput>("add", "Adds two numbers", [](const AddInput& in) {
+        app.tool<AddInput>("add", "Adds two numbers", [](const AddInput &in) {
             Json res = json_obj();
             res["result"] = in.a.get() + in.b.get();
             return res;
@@ -479,11 +477,11 @@ TEST_SUITE("MCP Protocol & CLI") {
         char arg0[] = "cli-app";
         char arg1[] = "add";
         char arg2[] = "{\"a\":15,\"b\":27}";
-        char* argv[] = {arg0, arg1, arg2, nullptr};
+        char *argv[] = {arg0, arg1, arg2, nullptr};
 
         // Redirect stdout to capture
         std::stringstream ss;
-        auto* oldBuf = std::cout.rdbuf(ss.rdbuf());
+        auto *oldBuf = std::cout.rdbuf(ss.rdbuf());
         int code = app.run(3, argv);
         std::cout.rdbuf(oldBuf);
 
@@ -522,7 +520,8 @@ TEST_SUITE("Bugsink Reporter") {
         std::stringstream ss(env);
         std::string line;
         while (std::getline(ss, line)) {
-            if (!line.empty()) lines.push_back(line);
+            if (!line.empty())
+                lines.push_back(line);
         }
 
         CHECK(lines.size() == 3);
@@ -557,7 +556,7 @@ TEST_SUITE("YAML & Frontmatter") {
         std::string yaml_doc = "name: slimr-yaml\nport: 9000\nenabled: true\ntags:\n  - fast\n  - cpp26\n";
         auto res = parse_yaml<Json>(yaml_doc);
         REQUIRE(res.has_value());
-        const Json& j = *res;
+        const Json &j = *res;
         CHECK(j["name"].get<std::string>() == "slimr-yaml");
         CHECK(j["port"].get<int64_t>() == 9000);
         CHECK(j["enabled"].get<bool>() == true);

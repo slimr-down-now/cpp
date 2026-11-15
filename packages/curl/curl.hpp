@@ -26,9 +26,10 @@ struct HttpRequest {
 };
 
 inline std::string url_encode(std::string_view input) {
-    CURL* curl = curl_easy_init();
-    if (!curl) return std::string(input);
-    char* output = curl_easy_escape(curl, input.data(), static_cast<int>(input.size()));
+    CURL *curl = curl_easy_init();
+    if (!curl)
+        return std::string(input);
+    char *output = curl_easy_escape(curl, input.data(), static_cast<int>(input.size()));
     std::string res;
     if (output) {
         res = output;
@@ -38,20 +39,21 @@ inline std::string url_encode(std::string_view input) {
     return res;
 }
 
-inline HttpResponse request(const HttpRequest& req) {
-    CURL* curl = curl_easy_init();
+inline HttpResponse request(const HttpRequest &req) {
+    CURL *curl = curl_easy_init();
     if (!curl) {
         throw std::runtime_error("curl_easy_init failed");
     }
 
     struct SListGuard {
-        curl_slist* list = nullptr;
+        curl_slist *list = nullptr;
         ~SListGuard() {
-            if (list) curl_slist_free_all(list);
+            if (list)
+                curl_slist_free_all(list);
         }
     } header_guard;
 
-    for (const auto& [k, v] : req.headers) {
+    for (const auto &[k, v] : req.headers) {
         std::string header_line = k + ": " + v;
         header_guard.list = curl_slist_append(header_guard.list, header_line.c_str());
     }
@@ -93,8 +95,8 @@ inline HttpResponse request(const HttpRequest& req) {
     }
 
     // Write callback
-    auto write_cb = [](char* ptr, size_t size, size_t nmemb, void* userdata) -> size_t {
-        auto* str = static_cast<std::string*>(userdata);
+    auto write_cb = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
+        auto *str = static_cast<std::string *>(userdata);
         size_t total = size * nmemb;
         str->append(ptr, total);
         return total;
@@ -103,8 +105,8 @@ inline HttpResponse request(const HttpRequest& req) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &res.body);
 
     // Header callback
-    auto header_cb = [](char* buffer, size_t size, size_t nitems, void* userdata) -> size_t {
-        auto* headers = static_cast<std::map<std::string, std::string>*>(userdata);
+    auto header_cb = [](char *buffer, size_t size, size_t nitems, void *userdata) -> size_t {
+        auto *headers = static_cast<std::map<std::string, std::string> *>(userdata);
         size_t total = size * nitems;
         std::string_view line(buffer, total);
         auto colon = line.find(':');
@@ -112,8 +114,10 @@ inline HttpResponse request(const HttpRequest& req) {
             std::string key(line.substr(0, colon));
             std::transform(key.begin(), key.end(), key.begin(), ::tolower);
             std::string_view val = line.substr(colon + 1);
-            while (!val.empty() && (val.front() == ' ' || val.front() == '\t')) val.remove_prefix(1);
-            while (!val.empty() && (val.back() == '\r' || val.back() == '\n' || val.back() == ' ')) val.remove_suffix(1);
+            while (!val.empty() && (val.front() == ' ' || val.front() == '\t'))
+                val.remove_prefix(1);
+            while (!val.empty() && (val.back() == '\r' || val.back() == '\n' || val.back() == ' '))
+                val.remove_suffix(1);
             (*headers)[key] = std::string(val);
         }
         return total;

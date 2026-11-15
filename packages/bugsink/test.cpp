@@ -30,7 +30,8 @@ TEST_SUITE("slimr::bugsink") {
         std::stringstream ss(env);
         std::string line;
         while (std::getline(ss, line)) {
-            if (!line.empty()) lines.push_back(line);
+            if (!line.empty())
+                lines.push_back(line);
         }
 
         CHECK(lines.size() == 3);

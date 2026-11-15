@@ -30,8 +30,7 @@ using SqlValue = std::variant<
     double,
     std::string,
     std::vector<uint8_t>,
-    bool
->;
+    bool>;
 
 struct RunResult {
     int64_t changes = 0;
@@ -79,8 +78,8 @@ inline int checked_sqlite_len(size_t n, std::string_view context) {
     return static_cast<int>(n);
 }
 
-inline std::string read_text_column(sqlite3_stmt* stmt, int col) {
-    const char* txt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, col));
+inline std::string read_text_column(sqlite3_stmt *stmt, int col) {
+    const char *txt = reinterpret_cast<const char *>(sqlite3_column_text(stmt, col));
     int bytes = sqlite3_column_bytes(stmt, col);
     if (!txt || bytes <= 0) {
         return {};
@@ -88,8 +87,8 @@ inline std::string read_text_column(sqlite3_stmt* stmt, int col) {
     return std::string(txt, static_cast<size_t>(bytes));
 }
 
-inline std::vector<uint8_t> read_blob_column(sqlite3_stmt* stmt, int col) {
-    const uint8_t* blob = reinterpret_cast<const uint8_t*>(sqlite3_column_blob(stmt, col));
+inline std::vector<uint8_t> read_blob_column(sqlite3_stmt *stmt, int col) {
+    const uint8_t *blob = reinterpret_cast<const uint8_t *>(sqlite3_column_blob(stmt, col));
     int bytes = sqlite3_column_bytes(stmt, col);
     if (!blob || bytes <= 0) {
         return {};
@@ -112,13 +111,13 @@ inline bool is_file_database_path(std::string_view path) noexcept {
 
 inline std::string ascii_lower(std::string_view s) {
     std::string out(s);
-    for (char& ch : out) {
+    for (char &ch : out) {
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
     }
     return out;
 }
 
-inline void throw_sqlite(sqlite3* db, std::string_view msg) {
+inline void throw_sqlite(sqlite3 *db, std::string_view msg) {
     std::string err = std::string(msg);
     if (db) {
         err += ": ";
@@ -127,9 +126,9 @@ inline void throw_sqlite(sqlite3* db, std::string_view msg) {
     throw std::runtime_error(err);
 }
 
-inline void bind_one(sqlite3* db, sqlite3_stmt* stmt, int idx, const SqlValue& val) {
+inline void bind_one(sqlite3 *db, sqlite3_stmt *stmt, int idx, const SqlValue &val) {
     int rc = SQLITE_OK;
-    std::visit([&](auto&& v) {
+    std::visit([&](auto &&v) {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, std::monostate>) {
             rc = sqlite3_bind_null(stmt, idx);
@@ -146,20 +145,21 @@ inline void bind_one(sqlite3* db, sqlite3_stmt* stmt, int idx, const SqlValue& v
         } else if constexpr (std::is_same_v<T, bool>) {
             rc = sqlite3_bind_int(stmt, idx, v ? 1 : 0);
         }
-    }, val);
+    },
+               val);
     if (rc != SQLITE_OK) {
         throw_sqlite(db, "Failed to bind parameter at index " + std::to_string(idx));
     }
 }
 
-inline void bind_params(sqlite3* db, sqlite3_stmt* stmt, const std::vector<SqlValue>& params) {
+inline void bind_params(sqlite3 *db, sqlite3_stmt *stmt, const std::vector<SqlValue> &params) {
     for (size_t i = 0; i < params.size(); ++i) {
         bind_one(db, stmt, static_cast<int>(i + 1), params[i]);
     }
 }
 
-inline void bind_params(sqlite3* db, sqlite3_stmt* stmt, const std::map<std::string, SqlValue>& params) {
-    for (const auto& [name, val] : params) {
+inline void bind_params(sqlite3 *db, sqlite3_stmt *stmt, const std::map<std::string, SqlValue> &params) {
+    for (const auto &[name, val] : params) {
         int idx = sqlite3_bind_parameter_index(stmt, name.c_str());
         if (idx == 0 && !name.empty()) {
             std::string bare = name;
@@ -183,40 +183,40 @@ inline void bind_params(sqlite3* db, sqlite3_stmt* stmt, const std::map<std::str
     }
 }
 
-inline Json row_to_json(sqlite3_stmt* stmt) {
+inline Json row_to_json(sqlite3_stmt *stmt) {
     int cols = sqlite3_column_count(stmt);
     Json row = Json::object_t{};
     for (int i = 0; i < cols; ++i) {
-        const char* name = sqlite3_column_name(stmt, i);
+        const char *name = sqlite3_column_name(stmt, i);
         int type = sqlite3_column_type(stmt, i);
         std::string key = name ? name : "";
         switch (type) {
-            case SQLITE_INTEGER:
-                row[key] = sqlite3_column_int64(stmt, i);
-                break;
-            case SQLITE_FLOAT:
-                row[key] = sqlite3_column_double(stmt, i);
-                break;
-            case SQLITE_TEXT:
-                row[key] = read_text_column(stmt, i);
-                break;
-            case SQLITE_BLOB: {
-                const char* blob = reinterpret_cast<const char*>(sqlite3_column_blob(stmt, i));
-                int bytes = sqlite3_column_bytes(stmt, i);
-                row[key] = (blob && bytes > 0) ? std::string(blob, static_cast<size_t>(bytes)) : std::string{};
-                break;
-            }
-            case SQLITE_NULL:
-            default:
-                row[key] = std::monostate{};
-                break;
+        case SQLITE_INTEGER:
+            row[key] = sqlite3_column_int64(stmt, i);
+            break;
+        case SQLITE_FLOAT:
+            row[key] = sqlite3_column_double(stmt, i);
+            break;
+        case SQLITE_TEXT:
+            row[key] = read_text_column(stmt, i);
+            break;
+        case SQLITE_BLOB: {
+            const char *blob = reinterpret_cast<const char *>(sqlite3_column_blob(stmt, i));
+            int bytes = sqlite3_column_bytes(stmt, i);
+            row[key] = (blob && bytes > 0) ? std::string(blob, static_cast<size_t>(bytes)) : std::string{};
+            break;
+        }
+        case SQLITE_NULL:
+        default:
+            row[key] = std::monostate{};
+            break;
         }
     }
     return row;
 }
 
 template <typename T>
-inline T column_to_val(sqlite3_stmt* stmt, int col) {
+inline T column_to_val(sqlite3_stmt *stmt, int col) {
     int type = sqlite3_column_type(stmt, col);
     if constexpr (is_optional_v<T>) {
         using Inner = typename T::value_type;
@@ -226,13 +226,17 @@ inline T column_to_val(sqlite3_stmt* stmt, int col) {
         return column_to_val<Inner>(stmt, col);
     } else if constexpr (std::is_same_v<T, SqlValue>) {
         switch (type) {
-            case SQLITE_INTEGER: return sqlite3_column_int64(stmt, col);
-            case SQLITE_FLOAT: return sqlite3_column_double(stmt, col);
-            case SQLITE_TEXT: return read_text_column(stmt, col);
-            case SQLITE_BLOB: return read_blob_column(stmt, col);
-            case SQLITE_NULL:
-            default:
-                return std::monostate{};
+        case SQLITE_INTEGER:
+            return sqlite3_column_int64(stmt, col);
+        case SQLITE_FLOAT:
+            return sqlite3_column_double(stmt, col);
+        case SQLITE_TEXT:
+            return read_text_column(stmt, col);
+        case SQLITE_BLOB:
+            return read_blob_column(stmt, col);
+        case SQLITE_NULL:
+        default:
+            return std::monostate{};
         }
     } else if constexpr (std::is_same_v<T, int64_t>) {
         if (type != SQLITE_INTEGER) {
@@ -271,7 +275,7 @@ inline T column_to_val(sqlite3_stmt* stmt, int col) {
     } else {
         // Fallback for custom types or Json
         Json j = row_to_json(stmt);
-        const char* name = sqlite3_column_name(stmt, col);
+        const char *name = sqlite3_column_name(stmt, col);
         std::string key = name ? name : "";
         if constexpr (std::is_same_v<T, Json>) {
             return j[key];
@@ -295,49 +299,49 @@ class Database;
 using SqliteDb = Database;
 
 class Tx {
-public:
-    Tx(Database& db, int depth) : db_(db), depth_(depth) {}
+  public:
+    Tx(Database &db, int depth) : db_(db), depth_(depth) {}
 
     template <typename T = Json>
-    std::optional<T> get(std::string_view sql, const std::vector<SqlValue>& params = {});
+    std::optional<T> get(std::string_view sql, const std::vector<SqlValue> &params = {});
     template <typename T = Json>
-    std::optional<T> get(std::string_view sql, const std::map<std::string, SqlValue>& params);
+    std::optional<T> get(std::string_view sql, const std::map<std::string, SqlValue> &params);
 
     template <typename T = Json>
-    std::vector<T> all(std::string_view sql, const std::vector<SqlValue>& params = {});
+    std::vector<T> all(std::string_view sql, const std::vector<SqlValue> &params = {});
     template <typename T = Json>
-    std::vector<T> all(std::string_view sql, const std::map<std::string, SqlValue>& params);
+    std::vector<T> all(std::string_view sql, const std::map<std::string, SqlValue> &params);
 
     template <typename T = SqlValue>
-    std::optional<T> pluck(std::string_view sql, const std::vector<SqlValue>& params = {});
+    std::optional<T> pluck(std::string_view sql, const std::vector<SqlValue> &params = {});
     template <typename T = SqlValue>
-    std::optional<T> pluck(std::string_view sql, const std::map<std::string, SqlValue>& params);
+    std::optional<T> pluck(std::string_view sql, const std::map<std::string, SqlValue> &params);
 
     template <typename T = SqlValue>
-    std::vector<T> pluckAll(std::string_view sql, const std::vector<SqlValue>& params = {});
+    std::vector<T> pluckAll(std::string_view sql, const std::vector<SqlValue> &params = {});
     template <typename T = SqlValue>
-    std::vector<T> pluckAll(std::string_view sql, const std::map<std::string, SqlValue>& params);
+    std::vector<T> pluckAll(std::string_view sql, const std::map<std::string, SqlValue> &params);
 
-    RunResult run(std::string_view sql, const std::vector<SqlValue>& params = {});
-    RunResult run(std::string_view sql, const std::map<std::string, SqlValue>& params);
+    RunResult run(std::string_view sql, const std::vector<SqlValue> &params = {});
+    RunResult run(std::string_view sql, const std::map<std::string, SqlValue> &params);
 
     void exec(std::string_view sql);
 
     template <typename Fn>
-    auto transaction(Fn&& fn, TransactionMode mode = TransactionMode::Immediate);
+    auto transaction(Fn &&fn, TransactionMode mode = TransactionMode::Immediate);
 
     int depth() const noexcept { return depth_; }
 
-private:
-    Database& db_;
+  private:
+    Database &db_;
     int depth_ = 0;
 };
 
 class Database {
-public:
+  public:
     struct FunctionDef {
         std::string name;
-        std::function<SqlValue(const std::vector<SqlValue>&)> fn;
+        std::function<SqlValue(const std::vector<SqlValue> &)> fn;
         bool deterministic = true;
     };
 
@@ -350,12 +354,12 @@ public:
         close();
     }
 
-    Database(const Database&) = delete;
-    Database& operator=(const Database&) = delete;
-    Database(Database&& other) noexcept {
+    Database(const Database &) = delete;
+    Database &operator=(const Database &) = delete;
+    Database(Database &&other) noexcept {
         move_from(std::move(other));
     }
-    Database& operator=(Database&& other) noexcept {
+    Database &operator=(Database &&other) noexcept {
         if (this != &other) {
             close();
             move_from(std::move(other));
@@ -363,11 +367,11 @@ public:
         return *this;
     }
 
-    sqlite3* handle() const noexcept { return db_; }
-    const std::string& path() const noexcept { return path_; }
+    sqlite3 *handle() const noexcept { return db_; }
+    const std::string &path() const noexcept { return path_; }
 
     void exec(std::string_view sql) {
-        char* errmsg = nullptr;
+        char *errmsg = nullptr;
         int rc = sqlite3_exec(db_, std::string(sql).c_str(), nullptr, nullptr, &errmsg);
         if (rc != SQLITE_OK) {
             std::string err = errmsg ? errmsg : "exec failed";
@@ -377,87 +381,93 @@ public:
     }
 
     template <typename T = Json>
-    std::optional<T> get(std::string_view sql, const std::vector<SqlValue>& params = {}) {
-        return query_first_row<T>(sql, [&](sqlite3_stmt* stmt) {
+    std::optional<T> get(std::string_view sql, const std::vector<SqlValue> &params = {}) {
+        return query_first_row<T>(sql, [&](sqlite3_stmt *stmt) {
             detail::bind_params(db_, stmt, params);
         });
     }
 
     template <typename T = Json>
-    std::optional<T> get(std::string_view sql, const std::map<std::string, SqlValue>& params) {
-        return query_first_row<T>(sql, [&](sqlite3_stmt* stmt) {
+    std::optional<T> get(std::string_view sql, const std::map<std::string, SqlValue> &params) {
+        return query_first_row<T>(sql, [&](sqlite3_stmt *stmt) {
             detail::bind_params(db_, stmt, params);
         });
     }
 
     template <typename T = Json>
-    std::vector<T> all(std::string_view sql, const std::vector<SqlValue>& params = {}) {
-        return query_rows<T>(sql, [&](sqlite3_stmt* stmt) {
+    std::vector<T> all(std::string_view sql, const std::vector<SqlValue> &params = {}) {
+        return query_rows<T>(sql, [&](sqlite3_stmt *stmt) {
             detail::bind_params(db_, stmt, params);
         });
     }
 
     template <typename T = Json>
-    std::vector<T> all(std::string_view sql, const std::map<std::string, SqlValue>& params) {
-        return query_rows<T>(sql, [&](sqlite3_stmt* stmt) {
+    std::vector<T> all(std::string_view sql, const std::map<std::string, SqlValue> &params) {
+        return query_rows<T>(sql, [&](sqlite3_stmt *stmt) {
             detail::bind_params(db_, stmt, params);
         });
     }
 
     template <typename T = SqlValue>
-    std::optional<T> pluck(std::string_view sql, const std::vector<SqlValue>& params = {}) {
-        return query_first_pluck<T>(sql, [&](sqlite3_stmt* stmt) {
+    std::optional<T> pluck(std::string_view sql, const std::vector<SqlValue> &params = {}) {
+        return query_first_pluck<T>(sql, [&](sqlite3_stmt *stmt) {
             detail::bind_params(db_, stmt, params);
         });
     }
 
     template <typename T = SqlValue>
-    std::optional<T> pluck(std::string_view sql, const std::map<std::string, SqlValue>& params) {
-        return query_first_pluck<T>(sql, [&](sqlite3_stmt* stmt) {
+    std::optional<T> pluck(std::string_view sql, const std::map<std::string, SqlValue> &params) {
+        return query_first_pluck<T>(sql, [&](sqlite3_stmt *stmt) {
             detail::bind_params(db_, stmt, params);
         });
     }
 
     template <typename T = SqlValue>
-    std::vector<T> pluckAll(std::string_view sql, const std::vector<SqlValue>& params = {}) {
-        return query_pluck<T>(sql, [&](sqlite3_stmt* stmt) {
+    std::vector<T> pluckAll(std::string_view sql, const std::vector<SqlValue> &params = {}) {
+        return query_pluck<T>(sql, [&](sqlite3_stmt *stmt) {
             detail::bind_params(db_, stmt, params);
         });
     }
 
     template <typename T = SqlValue>
-    std::vector<T> pluckAll(std::string_view sql, const std::map<std::string, SqlValue>& params) {
-        return query_pluck<T>(sql, [&](sqlite3_stmt* stmt) {
+    std::vector<T> pluckAll(std::string_view sql, const std::map<std::string, SqlValue> &params) {
+        return query_pluck<T>(sql, [&](sqlite3_stmt *stmt) {
             detail::bind_params(db_, stmt, params);
         });
     }
 
-    RunResult run(std::string_view sql, const std::vector<SqlValue>& params = {}) {
-        return execute_run(sql, [&](sqlite3_stmt* stmt) {
+    RunResult run(std::string_view sql, const std::vector<SqlValue> &params = {}) {
+        return execute_run(sql, [&](sqlite3_stmt *stmt) {
             detail::bind_params(db_, stmt, params);
         });
     }
 
-    RunResult run(std::string_view sql, const std::map<std::string, SqlValue>& params) {
-        return execute_run(sql, [&](sqlite3_stmt* stmt) {
+    RunResult run(std::string_view sql, const std::map<std::string, SqlValue> &params) {
+        return execute_run(sql, [&](sqlite3_stmt *stmt) {
             detail::bind_params(db_, stmt, params);
         });
     }
 
     template <typename Fn>
-    auto transaction(Fn&& fn, TransactionMode mode = TransactionMode::Immediate) {
+    auto transaction(Fn &&fn, TransactionMode mode = TransactionMode::Immediate) {
         if (tx_depth_ == 0) {
             std::string begin = "BEGIN ";
             switch (mode) {
-                case TransactionMode::Immediate: begin += "IMMEDIATE;"; break;
-                case TransactionMode::Deferred:  begin += "DEFERRED;"; break;
-                case TransactionMode::Exclusive: begin += "EXCLUSIVE;"; break;
+            case TransactionMode::Immediate:
+                begin += "IMMEDIATE;";
+                break;
+            case TransactionMode::Deferred:
+                begin += "DEFERRED;";
+                break;
+            case TransactionMode::Exclusive:
+                begin += "EXCLUSIVE;";
+                break;
             }
             exec(begin);
             tx_depth_ = 1;
             try {
                 Tx tx(*this, 1);
-                if constexpr (std::is_void_v<std::invoke_result_t<Fn, Tx&>>) {
+                if constexpr (std::is_void_v<std::invoke_result_t<Fn, Tx &>>) {
                     fn(tx);
                     exec("COMMIT;");
                     tx_depth_ = 0;
@@ -468,7 +478,10 @@ public:
                     return res;
                 }
             } catch (...) {
-                try { exec("ROLLBACK;"); } catch (...) {}
+                try {
+                    exec("ROLLBACK;");
+                } catch (...) {
+                }
                 tx_depth_ = 0;
                 throw;
             }
@@ -479,7 +492,7 @@ public:
             ++tx_depth_;
             try {
                 Tx tx(*this, tx_depth_);
-                if constexpr (std::is_void_v<std::invoke_result_t<Fn, Tx&>>) {
+                if constexpr (std::is_void_v<std::invoke_result_t<Fn, Tx &>>) {
                     fn(tx);
                     exec("RELEASE " + sp + ";");
                     --tx_depth_;
@@ -490,8 +503,14 @@ public:
                     return res;
                 }
             } catch (...) {
-                try { exec("ROLLBACK TO " + sp + ";"); } catch (...) {}
-                try { exec("RELEASE " + sp + ";"); } catch (...) {}
+                try {
+                    exec("ROLLBACK TO " + sp + ";");
+                } catch (...) {
+                }
+                try {
+                    exec("RELEASE " + sp + ";");
+                } catch (...) {
+                }
                 --tx_depth_;
                 throw;
             }
@@ -499,28 +518,28 @@ public:
     }
 
     IterateResult iterateLimited(std::string_view sql,
-                                 const IterateOptions& opts = {}) {
+                                 const IterateOptions &opts = {}) {
         return iterateLimited(sql, std::vector<SqlValue>{}, opts);
     }
 
     IterateResult iterateLimited(std::string_view sql,
-                                 const std::vector<SqlValue>& params,
-                                 const IterateOptions& opts) {
-        return execute_iterate(sql, opts, [&](sqlite3* targetDb, sqlite3_stmt* stmt) {
+                                 const std::vector<SqlValue> &params,
+                                 const IterateOptions &opts) {
+        return execute_iterate(sql, opts, [&](sqlite3 *targetDb, sqlite3_stmt *stmt) {
             detail::bind_params(targetDb, stmt, params);
         });
     }
 
     IterateResult iterateLimited(std::string_view sql,
-                                 const std::map<std::string, SqlValue>& params,
-                                 const IterateOptions& opts) {
-        return execute_iterate(sql, opts, [&](sqlite3* targetDb, sqlite3_stmt* stmt) {
+                                 const std::map<std::string, SqlValue> &params,
+                                 const IterateOptions &opts) {
+        return execute_iterate(sql, opts, [&](sqlite3 *targetDb, sqlite3_stmt *stmt) {
             detail::bind_params(targetDb, stmt, params);
         });
     }
 
     void registerFunction(std::string_view name,
-                          std::function<SqlValue(const std::vector<SqlValue>&)> fn,
+                          std::function<SqlValue(const std::vector<SqlValue> &)> fn,
                           bool deterministic = true) {
         FunctionDef def{std::string(name), std::move(fn), deterministic};
         register_function_internal(db_, def);
@@ -534,7 +553,7 @@ public:
                 std::filesystem::create_directories(p.parent_path());
             }
         }
-        sqlite3* rawDest = nullptr;
+        sqlite3 *rawDest = nullptr;
         int rc = sqlite3_open(std::string(destPath).c_str(), &rawDest);
         std::unique_ptr<sqlite3, decltype(&sqlite3_close)> destDb(rawDest, &sqlite3_close);
         if (rc != SQLITE_OK || !destDb) {
@@ -566,16 +585,16 @@ public:
         }
     }
 
-private:
+  private:
     struct CacheEntry {
         std::string sql;
-        sqlite3_stmt* stmt = nullptr;
+        sqlite3_stmt *stmt = nullptr;
         bool in_use = false;
     };
 
     std::string path_;
     SqliteOptions options_;
-    sqlite3* db_ = nullptr;
+    sqlite3 *db_ = nullptr;
     int tx_depth_ = 0;
     std::map<std::string, FunctionDef> functions_;
 
@@ -594,7 +613,7 @@ private:
 
         int flags = options_.readOnly ? (SQLITE_OPEN_READONLY | SQLITE_OPEN_URI)
                                       : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI);
-        sqlite3* raw = nullptr;
+        sqlite3 *raw = nullptr;
         int rc = sqlite3_open_v2(path_.c_str(), &raw, flags, nullptr);
         db_ = raw;
         try {
@@ -640,22 +659,23 @@ private:
         }
     }
 
-    void run_migrations(const std::variant<std::vector<std::string>, std::map<int, std::string>>& mig) {
+    void run_migrations(const std::variant<std::vector<std::string>, std::map<int, std::string>> &mig) {
         std::vector<std::pair<int, std::string>> steps;
         if (std::holds_alternative<std::vector<std::string>>(mig)) {
-            const auto& vec = std::get<std::vector<std::string>>(mig);
+            const auto &vec = std::get<std::vector<std::string>>(mig);
             for (size_t i = 0; i < vec.size(); ++i) {
                 steps.emplace_back(static_cast<int>(i + 1), vec[i]);
             }
         } else {
-            const auto& m = std::get<std::map<int, std::string>>(mig);
-            for (const auto& [ver, sql] : m) {
+            const auto &m = std::get<std::map<int, std::string>>(mig);
+            for (const auto &[ver, sql] : m) {
                 steps.emplace_back(ver, sql);
             }
         }
 
-        if (steps.empty()) return;
-        std::sort(steps.begin(), steps.end(), [](const auto& a, const auto& b) {
+        if (steps.empty())
+            return;
+        std::sort(steps.begin(), steps.end(), [](const auto &a, const auto &b) {
             return a.first < b.first;
         });
 
@@ -669,29 +689,33 @@ private:
         }
 
         std::vector<std::pair<int, std::string>> pending;
-        for (const auto& s : steps) {
+        for (const auto &s : steps) {
             if (s.first > currentVersion) {
                 pending.push_back(s);
             }
         }
 
-        if (pending.empty()) return;
+        if (pending.empty())
+            return;
 
         exec("BEGIN IMMEDIATE;");
         try {
-            for (const auto& [v, sql] : pending) {
+            for (const auto &[v, sql] : pending) {
                 exec(sql);
                 exec("PRAGMA user_version = " + std::to_string(v) + ";");
             }
             exec("COMMIT;");
         } catch (...) {
-            try { exec("ROLLBACK;"); } catch (...) {}
+            try {
+                exec("ROLLBACK;");
+            } catch (...) {
+            }
             throw;
         }
     }
 
-    void register_function_internal(sqlite3* targetDb, const FunctionDef& def) {
-        auto fn_ptr = new std::function<SqlValue(const std::vector<SqlValue>&)>(def.fn);
+    void register_function_internal(sqlite3 *targetDb, const FunctionDef &def) {
+        auto fn_ptr = new std::function<SqlValue(const std::vector<SqlValue> &)>(def.fn);
         int flags = SQLITE_UTF8 | (def.deterministic ? SQLITE_DETERMINISTIC : 0);
 
         int rc = sqlite3_create_function_v2(
@@ -700,40 +724,40 @@ private:
             -1,
             flags,
             fn_ptr,
-            [](sqlite3_context* ctx, int argc, sqlite3_value** argv) {
-                auto* fn = static_cast<std::function<SqlValue(const std::vector<SqlValue>&)>*>(sqlite3_user_data(ctx));
+            [](sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+                auto *fn = static_cast<std::function<SqlValue(const std::vector<SqlValue> &)> *>(sqlite3_user_data(ctx));
                 std::vector<SqlValue> args;
                 args.reserve(static_cast<size_t>(argc));
                 for (int i = 0; i < argc; ++i) {
                     int type = sqlite3_value_type(argv[i]);
                     switch (type) {
-                        case SQLITE_INTEGER:
-                            args.emplace_back(sqlite3_value_int64(argv[i]));
-                            break;
-                        case SQLITE_FLOAT:
-                            args.emplace_back(sqlite3_value_double(argv[i]));
-                            break;
-                        case SQLITE_TEXT: {
-                            const char* txt = reinterpret_cast<const char*>(sqlite3_value_text(argv[i]));
-                            int bytes = sqlite3_value_bytes(argv[i]);
-                            args.emplace_back((txt && bytes > 0) ? std::string(txt, static_cast<size_t>(bytes)) : std::string{});
-                            break;
-                        }
-                        case SQLITE_BLOB: {
-                            const uint8_t* blob = reinterpret_cast<const uint8_t*>(sqlite3_value_blob(argv[i]));
-                            int bytes = sqlite3_value_bytes(argv[i]);
-                            args.emplace_back((blob && bytes > 0) ? std::vector<uint8_t>(blob, blob + bytes) : std::vector<uint8_t>{});
-                            break;
-                        }
-                        case SQLITE_NULL:
-                        default:
-                            args.emplace_back(std::monostate{});
-                            break;
+                    case SQLITE_INTEGER:
+                        args.emplace_back(sqlite3_value_int64(argv[i]));
+                        break;
+                    case SQLITE_FLOAT:
+                        args.emplace_back(sqlite3_value_double(argv[i]));
+                        break;
+                    case SQLITE_TEXT: {
+                        const char *txt = reinterpret_cast<const char *>(sqlite3_value_text(argv[i]));
+                        int bytes = sqlite3_value_bytes(argv[i]);
+                        args.emplace_back((txt && bytes > 0) ? std::string(txt, static_cast<size_t>(bytes)) : std::string{});
+                        break;
+                    }
+                    case SQLITE_BLOB: {
+                        const uint8_t *blob = reinterpret_cast<const uint8_t *>(sqlite3_value_blob(argv[i]));
+                        int bytes = sqlite3_value_bytes(argv[i]);
+                        args.emplace_back((blob && bytes > 0) ? std::vector<uint8_t>(blob, blob + bytes) : std::vector<uint8_t>{});
+                        break;
+                    }
+                    case SQLITE_NULL:
+                    default:
+                        args.emplace_back(std::monostate{});
+                        break;
                     }
                 }
                 try {
                     SqlValue res = (*fn)(args);
-                    std::visit([&](auto&& v) {
+                    std::visit([&](auto &&v) {
                         using T = std::decay_t<decltype(v)>;
                         if constexpr (std::is_same_v<T, std::monostate>) {
                             sqlite3_result_null(ctx);
@@ -750,8 +774,9 @@ private:
                         } else if constexpr (std::is_same_v<T, bool>) {
                             sqlite3_result_int(ctx, v ? 1 : 0);
                         }
-                    }, res);
-                } catch (const std::exception& e) {
+                    },
+                               res);
+                } catch (const std::exception &e) {
                     sqlite3_result_error(ctx, e.what(), -1);
                 } catch (...) {
                     sqlite3_result_error(ctx, "Unknown exception in user function", -1);
@@ -759,16 +784,15 @@ private:
             },
             nullptr,
             nullptr,
-            [](void* ptr) {
-                delete static_cast<std::function<SqlValue(const std::vector<SqlValue>&)>*>(ptr);
-            }
-        );
+            [](void *ptr) {
+                delete static_cast<std::function<SqlValue(const std::vector<SqlValue> &)> *>(ptr);
+            });
         if (rc != SQLITE_OK) {
             detail::throw_sqlite(targetDb, "Failed to register custom function " + def.name);
         }
     }
 
-    sqlite3_stmt* checkout_statement(std::string_view sql, bool& is_temporary) {
+    sqlite3_stmt *checkout_statement(std::string_view sql, bool &is_temporary) {
         int sql_len = detail::checked_sqlite_len(sql.size(), "sqlite3_prepare_v2");
         std::string sql_str(sql);
         auto it = lru_map_.find(sql_str);
@@ -785,10 +809,11 @@ private:
         }
 
         // Prepare new
-        sqlite3_stmt* stmt = nullptr;
+        sqlite3_stmt *stmt = nullptr;
         int rc = sqlite3_prepare_v2(db_, sql_str.c_str(), sql_len, &stmt, nullptr);
         if (rc != SQLITE_OK) {
-            if (stmt) sqlite3_finalize(stmt);
+            if (stmt)
+                sqlite3_finalize(stmt);
             detail::throw_sqlite(db_, "Prepare failed for SQL: " + sql_str);
         }
 
@@ -800,7 +825,7 @@ private:
 
         if (lru_list_.size() >= kMaxCacheSize) {
             // Evict the least-recently-used statement that is not currently in use.
-            auto evict_it = std::find_if(lru_list_.rbegin(), lru_list_.rend(), [](const CacheEntry& e) {
+            auto evict_it = std::find_if(lru_list_.rbegin(), lru_list_.rend(), [](const CacheEntry &e) {
                 return !e.in_use;
             });
             if (evict_it == lru_list_.rend()) {
@@ -810,7 +835,8 @@ private:
             }
             auto fwd = std::prev(evict_it.base());
             lru_map_.erase(fwd->sql);
-            if (fwd->stmt) sqlite3_finalize(fwd->stmt);
+            if (fwd->stmt)
+                sqlite3_finalize(fwd->stmt);
             lru_list_.erase(fwd);
         }
 
@@ -820,9 +846,10 @@ private:
         return stmt;
     }
 
-    void return_statement(std::string_view sql, sqlite3_stmt* stmt, bool is_temporary) noexcept {
+    void return_statement(std::string_view sql, sqlite3_stmt *stmt, bool is_temporary) noexcept {
         if (is_temporary) {
-            if (stmt) sqlite3_finalize(stmt);
+            if (stmt)
+                sqlite3_finalize(stmt);
             return;
         }
         std::string sql_str(sql);
@@ -837,15 +864,16 @@ private:
     }
 
     void clear_statement_cache() noexcept {
-        for (auto& entry : lru_list_) {
-            if (entry.stmt) sqlite3_finalize(entry.stmt);
+        for (auto &entry : lru_list_) {
+            if (entry.stmt)
+                sqlite3_finalize(entry.stmt);
         }
         lru_list_.clear();
         lru_map_.clear();
     }
 
     template <typename T>
-    static T extract_row(sqlite3_stmt* stmt) {
+    static T extract_row(sqlite3_stmt *stmt) {
         if constexpr (std::is_same_v<T, Json>) {
             return detail::row_to_json(stmt);
         } else {
@@ -863,9 +891,9 @@ private:
     }
 
     template <typename T, typename Binder, typename Extractor>
-    std::vector<T> step_query(std::string_view sql, Binder&& binder, Extractor&& extract, bool single_row) {
+    std::vector<T> step_query(std::string_view sql, Binder &&binder, Extractor &&extract, bool single_row) {
         bool is_temp = false;
-        sqlite3_stmt* stmt = checkout_statement(sql, is_temp);
+        sqlite3_stmt *stmt = checkout_statement(sql, is_temp);
         std::vector<T> results;
         try {
             binder(stmt);
@@ -891,41 +919,35 @@ private:
     }
 
     template <typename T, typename Binder>
-    std::vector<T> query_rows(std::string_view sql, Binder&& binder) {
-        return step_query<T>(sql, std::forward<Binder>(binder), [](sqlite3_stmt* stmt) {
-            return extract_row<T>(stmt);
-        }, false);
+    std::vector<T> query_rows(std::string_view sql, Binder &&binder) {
+        return step_query<T>(sql, std::forward<Binder>(binder), [](sqlite3_stmt *stmt) { return extract_row<T>(stmt); }, false);
     }
 
     template <typename T, typename Binder>
-    std::optional<T> query_first_row(std::string_view sql, Binder&& binder) {
-        auto rows = step_query<T>(sql, std::forward<Binder>(binder), [](sqlite3_stmt* stmt) {
-            return extract_row<T>(stmt);
-        }, true);
-        if (rows.empty()) return std::nullopt;
+    std::optional<T> query_first_row(std::string_view sql, Binder &&binder) {
+        auto rows = step_query<T>(sql, std::forward<Binder>(binder), [](sqlite3_stmt *stmt) { return extract_row<T>(stmt); }, true);
+        if (rows.empty())
+            return std::nullopt;
         return std::move(rows[0]);
     }
 
     template <typename T, typename Binder>
-    std::vector<T> query_pluck(std::string_view sql, Binder&& binder) {
-        return step_query<T>(sql, std::forward<Binder>(binder), [](sqlite3_stmt* stmt) {
-            return detail::column_to_val<T>(stmt, 0);
-        }, false);
+    std::vector<T> query_pluck(std::string_view sql, Binder &&binder) {
+        return step_query<T>(sql, std::forward<Binder>(binder), [](sqlite3_stmt *stmt) { return detail::column_to_val<T>(stmt, 0); }, false);
     }
 
     template <typename T, typename Binder>
-    std::optional<T> query_first_pluck(std::string_view sql, Binder&& binder) {
-        auto vals = step_query<T>(sql, std::forward<Binder>(binder), [](sqlite3_stmt* stmt) {
-            return detail::column_to_val<T>(stmt, 0);
-        }, true);
-        if (vals.empty()) return std::nullopt;
+    std::optional<T> query_first_pluck(std::string_view sql, Binder &&binder) {
+        auto vals = step_query<T>(sql, std::forward<Binder>(binder), [](sqlite3_stmt *stmt) { return detail::column_to_val<T>(stmt, 0); }, true);
+        if (vals.empty())
+            return std::nullopt;
         return std::move(vals[0]);
     }
 
     template <typename Binder>
-    RunResult execute_run(std::string_view sql, Binder&& binder) {
+    RunResult execute_run(std::string_view sql, Binder &&binder) {
         bool is_temp = false;
-        sqlite3_stmt* stmt = checkout_statement(sql, is_temp);
+        sqlite3_stmt *stmt = checkout_statement(sql, is_temp);
         RunResult res;
         try {
             binder(stmt);
@@ -944,14 +966,14 @@ private:
     }
 
     template <typename Binder>
-    IterateResult execute_iterate(std::string_view sql, const IterateOptions& opts, Binder&& binder) {
+    IterateResult execute_iterate(std::string_view sql, const IterateOptions &opts, Binder &&binder) {
         int sql_len = detail::checked_sqlite_len(sql.size(), "sqlite3_prepare_v2");
-        sqlite3* targetDb = db_;
-        sqlite3* tempDb = nullptr;
+        sqlite3 *targetDb = db_;
+        sqlite3 *tempDb = nullptr;
 
         struct Guard {
-            sqlite3* temp = nullptr;
-            sqlite3* target = nullptr;
+            sqlite3 *temp = nullptr;
+            sqlite3 *target = nullptr;
             bool reset = false;
             ~Guard() {
                 if (reset && target) {
@@ -971,23 +993,25 @@ private:
                 detail::throw_sqlite(tempDb, "Failed to open read-only connection");
             }
             sqlite3_busy_timeout(tempDb, 5000);
-            for (const auto& [_, def] : functions_) {
+            for (const auto &[_, def] : functions_) {
                 register_function_internal(tempDb, def);
             }
             if (!opts.setupSql.empty()) {
-                char* err = nullptr;
+                char *err = nullptr;
                 int execRc = sqlite3_exec(tempDb, opts.setupSql.c_str(), nullptr, nullptr, &err);
                 if (execRc != SQLITE_OK || err) {
                     std::string e = err ? err : "setupSql failed";
-                    if (err) sqlite3_free(err);
+                    if (err)
+                        sqlite3_free(err);
                     throw std::runtime_error("setupSql failed on tempDb: " + e);
                 }
             }
-            char* qerr = nullptr;
+            char *qerr = nullptr;
             int qrc = sqlite3_exec(tempDb, "PRAGMA query_only = ON;", nullptr, nullptr, &qerr);
             if (qrc != SQLITE_OK || qerr) {
                 std::string e = qerr ? qerr : "PRAGMA query_only = ON failed";
-                if (qerr) sqlite3_free(qerr);
+                if (qerr)
+                    sqlite3_free(qerr);
                 throw std::runtime_error(e);
             }
             targetDb = tempDb;
@@ -1002,7 +1026,7 @@ private:
             }
         }
 
-        sqlite3_stmt* raw_stmt = nullptr;
+        sqlite3_stmt *raw_stmt = nullptr;
         int rc = sqlite3_prepare_v2(targetDb, std::string(sql).c_str(), sql_len, &raw_stmt, nullptr);
         std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> stmt(raw_stmt, &sqlite3_finalize);
         if (rc != SQLITE_OK || !stmt) {
@@ -1013,7 +1037,7 @@ private:
         binder(targetDb, stmt.get());
         int cols = sqlite3_column_count(stmt.get());
         for (int i = 0; i < cols; ++i) {
-            const char* name = sqlite3_column_name(stmt.get(), i);
+            const char *name = sqlite3_column_name(stmt.get(), i);
             res.columns.emplace_back(name ? name : "");
         }
 
@@ -1039,7 +1063,7 @@ private:
         return res;
     }
 
-    void move_from(Database&& o) noexcept {
+    void move_from(Database &&o) noexcept {
         path_ = std::move(o.path_);
         options_ = std::move(o.options_);
         db_ = o.db_;
@@ -1054,48 +1078,48 @@ private:
 
 // Implementations for Tx methods
 template <typename T>
-inline std::optional<T> Tx::get(std::string_view sql, const std::vector<SqlValue>& params) {
+inline std::optional<T> Tx::get(std::string_view sql, const std::vector<SqlValue> &params) {
     return db_.get<T>(sql, params);
 }
 template <typename T>
-inline std::optional<T> Tx::get(std::string_view sql, const std::map<std::string, SqlValue>& params) {
+inline std::optional<T> Tx::get(std::string_view sql, const std::map<std::string, SqlValue> &params) {
     return db_.get<T>(sql, params);
 }
 template <typename T>
-inline std::vector<T> Tx::all(std::string_view sql, const std::vector<SqlValue>& params) {
+inline std::vector<T> Tx::all(std::string_view sql, const std::vector<SqlValue> &params) {
     return db_.all<T>(sql, params);
 }
 template <typename T>
-inline std::vector<T> Tx::all(std::string_view sql, const std::map<std::string, SqlValue>& params) {
+inline std::vector<T> Tx::all(std::string_view sql, const std::map<std::string, SqlValue> &params) {
     return db_.all<T>(sql, params);
 }
 template <typename T>
-inline std::optional<T> Tx::pluck(std::string_view sql, const std::vector<SqlValue>& params) {
+inline std::optional<T> Tx::pluck(std::string_view sql, const std::vector<SqlValue> &params) {
     return db_.pluck<T>(sql, params);
 }
 template <typename T>
-inline std::optional<T> Tx::pluck(std::string_view sql, const std::map<std::string, SqlValue>& params) {
+inline std::optional<T> Tx::pluck(std::string_view sql, const std::map<std::string, SqlValue> &params) {
     return db_.pluck<T>(sql, params);
 }
 template <typename T>
-inline std::vector<T> Tx::pluckAll(std::string_view sql, const std::vector<SqlValue>& params) {
+inline std::vector<T> Tx::pluckAll(std::string_view sql, const std::vector<SqlValue> &params) {
     return db_.pluckAll<T>(sql, params);
 }
 template <typename T>
-inline std::vector<T> Tx::pluckAll(std::string_view sql, const std::map<std::string, SqlValue>& params) {
+inline std::vector<T> Tx::pluckAll(std::string_view sql, const std::map<std::string, SqlValue> &params) {
     return db_.pluckAll<T>(sql, params);
 }
-inline RunResult Tx::run(std::string_view sql, const std::vector<SqlValue>& params) {
+inline RunResult Tx::run(std::string_view sql, const std::vector<SqlValue> &params) {
     return db_.run(sql, params);
 }
-inline RunResult Tx::run(std::string_view sql, const std::map<std::string, SqlValue>& params) {
+inline RunResult Tx::run(std::string_view sql, const std::map<std::string, SqlValue> &params) {
     return db_.run(sql, params);
 }
 inline void Tx::exec(std::string_view sql) {
     db_.exec(sql);
 }
 template <typename Fn>
-inline auto Tx::transaction(Fn&& fn, TransactionMode mode) {
+inline auto Tx::transaction(Fn &&fn, TransactionMode mode) {
     return db_.transaction(std::forward<Fn>(fn), mode);
 }
 
