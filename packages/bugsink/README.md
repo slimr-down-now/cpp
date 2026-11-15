@@ -50,7 +50,7 @@ int main() {
 | Member Function / Type | Signature | Description |
 | --- | --- | --- |
 | `ParsedDsn` | `struct ParsedDsn { std::string protocol; std::string publicKey; std::string host; std::string projectId; bool valid = false; };` | Parsed components of a Sentry/Bugsink DSN string. |
-| `BugsinkReporter` constructor | `explicit BugsinkReporter(std::string dsn = "", std::string envVar = "BUGSINK_DSN")` | Constructs reporter with fallback DSN and target environment variable name. |
+| `BugsinkReporter` constructor | `explicit BugsinkReporter(std::string dsn = "", std::string envVar = "BUGSINK_DSN", std::string release = "")` | Constructs reporter with fallback DSN, target environment variable name, and optional release identifier. |
 | `parseDsn` | `static ParsedDsn parseDsn(std::string_view dsn)` | Parses a DSN string into its protocol, public key, host, and project ID components. |
 | `effectiveDsn` | `std::string effectiveDsn() const` | Returns the active DSN (checking environment variable first, then fallback). |
 | `envelopeUrl` | `std::string envelopeUrl() const` | Builds the full Sentry HTTP envelope ingestion URL. |

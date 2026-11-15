@@ -61,8 +61,10 @@ class BugsinkReporter {
         bool valid = false;
     };
 
-    explicit BugsinkReporter(std::string dsn = "", std::string envVar = "BUGSINK_DSN")
-        : default_dsn_(std::move(dsn)), env_var_(std::move(envVar)) {}
+    explicit BugsinkReporter(std::string dsn = "", std::string envVar = "BUGSINK_DSN", std::string release = "")
+        : default_dsn_(std::move(dsn)), env_var_(std::move(envVar)), release_(std::move(release)) {}
+
+    const std::string &release() const noexcept { return release_; }
 
     static ParsedDsn parseDsn(std::string_view dsn) {
         ParsedDsn res;
@@ -120,20 +122,16 @@ class BugsinkReporter {
         return line1 + "\n" + line2 + "\n" + line3 + "\n";
     }
 
-    bool reportError(const std::exception &err, const Json &extra = Json::object_t{}) {
-        std::string url = envelopeUrl();
-        if (url.empty())
-            return false;
-
-        std::string eventId = detail::generate_uuid_hex();
-        std::string ts = detail::iso_timestamp();
-
+    Json buildErrorPayload(const std::exception &err, const std::string &eventId, const std::string &ts, const Json &extra = Json::object_t{}) const {
         Json payload = Json::object_t{};
         payload["event_id"] = eventId;
         payload["timestamp"] = ts;
         payload["platform"] = "native";
         payload["server_name"] = detail::get_hostname();
         payload["level"] = "error";
+        if (!release_.empty()) {
+            payload["release"] = release_;
+        }
 
         Json val = Json::object_t{};
         val["type"] = "Error";
@@ -149,6 +147,36 @@ class BugsinkReporter {
         if (!extra.empty()) {
             payload["extra"] = extra;
         }
+        return payload;
+    }
+
+    Json buildMessagePayload(std::string_view message, std::string_view level, const std::string &eventId, const std::string &ts, const Json &extra = Json::object_t{}) const {
+        Json payload = Json::object_t{};
+        payload["event_id"] = eventId;
+        payload["timestamp"] = ts;
+        payload["platform"] = "native";
+        payload["server_name"] = detail::get_hostname();
+        payload["level"] = std::string(level);
+        if (!release_.empty()) {
+            payload["release"] = release_;
+        }
+        payload["message"]["formatted"] = std::string(message);
+
+        if (!extra.empty()) {
+            payload["extra"] = extra;
+        }
+        return payload;
+    }
+
+    bool reportError(const std::exception &err, const Json &extra = Json::object_t{}) {
+        std::string url = envelopeUrl();
+        if (url.empty())
+            return false;
+
+        std::string eventId = detail::generate_uuid_hex();
+        std::string ts = detail::iso_timestamp();
+
+        Json payload = buildErrorPayload(err, eventId, ts, extra);
 
         std::string body = formatEnvelope(payload, eventId, ts);
 
@@ -175,17 +203,7 @@ class BugsinkReporter {
         std::string eventId = detail::generate_uuid_hex();
         std::string ts = detail::iso_timestamp();
 
-        Json payload = Json::object_t{};
-        payload["event_id"] = eventId;
-        payload["timestamp"] = ts;
-        payload["platform"] = "native";
-        payload["server_name"] = detail::get_hostname();
-        payload["level"] = std::string(level);
-        payload["message"]["formatted"] = std::string(message);
-
-        if (!extra.empty()) {
-            payload["extra"] = extra;
-        }
+        Json payload = buildMessagePayload(message, level, eventId, ts, extra);
 
         std::string body = formatEnvelope(payload, eventId, ts);
 
@@ -206,6 +224,7 @@ class BugsinkReporter {
   private:
     std::string default_dsn_;
     std::string env_var_;
+    std::string release_;
 };
 
 } // namespace slimr

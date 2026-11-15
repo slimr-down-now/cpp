@@ -48,4 +48,20 @@ TEST_SUITE("slimr::bugsink") {
         CHECK(reporter.envelopeUrl() == "");
         unsetenv("TEST_BUGSINK_DSN");
     }
+
+    TEST_CASE("Release parameter is included when non-empty and omitted when empty") {
+        BugsinkReporter withRelease("https://pub@sentry.local/1", "BUGSINK_DSN", "app@1.2.3");
+        CHECK(withRelease.release() == "app@1.2.3");
+        auto errPayload = withRelease.buildErrorPayload(std::runtime_error("boom"), "ev1", "2026-11-15T00:00:00Z");
+        CHECK(errPayload["release"].get<std::string>() == "app@1.2.3");
+        auto msgPayload = withRelease.buildMessagePayload("hi", "info", "ev2", "2026-11-15T00:00:00Z");
+        CHECK(msgPayload["release"].get<std::string>() == "app@1.2.3");
+
+        BugsinkReporter withoutRelease("https://pub@sentry.local/1");
+        CHECK(withoutRelease.release().empty());
+        auto errNoRel = withoutRelease.buildErrorPayload(std::runtime_error("boom"), "ev3", "2026-11-15T00:00:00Z");
+        CHECK(!errNoRel.contains("release"));
+        auto msgNoRel = withoutRelease.buildMessagePayload("hi", "info", "ev4", "2026-11-15T00:00:00Z");
+        CHECK(!msgNoRel.contains("release"));
+    }
 }
