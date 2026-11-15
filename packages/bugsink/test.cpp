@@ -14,7 +14,8 @@ TEST_SUITE("slimr::bugsink") {
         CHECK(parsed.host == "bugsink.btek.cc");
         CHECK(parsed.projectId == "4");
 
-        BugsinkReporter reporter("https://key123@example.com/99");
+        unsetenv("TEST_UNSET_BUGSINK_DSN");
+        BugsinkReporter reporter("https://key123@example.com/99", "TEST_UNSET_BUGSINK_DSN");
         CHECK(reporter.envelopeUrl() == "https://example.com/api/99/envelope/?sentry_key=key123&sentry_version=7");
     }
 
